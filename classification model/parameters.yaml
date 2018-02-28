@@ -1,0 +1,13 @@
+exp: 40
+model: model1
+num_epochs: 50
+batch_size: 512
+learning_rate: 0.001
+reg: 0.4
+dropout: 0
+data_dir: data/mcs40_5class/
+inp_shape: 6
+train: True
+test: False
+num_classes: 5
+data_idx: [0,1,2,3,4,5]
