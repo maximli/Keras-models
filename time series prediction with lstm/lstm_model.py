@@ -108,6 +108,39 @@ class lstm():
         return x, y
 
 
+    def arrange_batches(self,x,y,batchsize):
+        """
+
+        :param x: of shape(N,timesteps,1)
+        :param y: of shape(N,timesteps,1)
+        :return: re-arranged data to match stateful lstm
+        """
+
+        print("\nrearranging batches before training")
+        num_batches= int(x.shape[0]/batchsize)
+        new_x=np.zeros(x.shape)
+        new_y=np.zeros(y.shape)
+
+
+
+        inc=0
+        for i in range(0 ,num_batches*batchsize, batchsize):
+            m=0
+            for j in range(i, i+batchsize):
+                new_x[j]=x[inc+(m*num_batches)]
+                new_y[j]=y[inc+(m*num_batches)]
+                m+=1
+            inc+=1
+
+        print("number of batches {} , batch size {} ".format(num_batches, batchsize))
+
+
+
+        return new_x, new_y
+
+
+
+
 
     #########################################
 
@@ -141,14 +174,21 @@ class lstm():
         print("x_train: {}  , y_train: {} ".format(self.x_train.shape, self.y_train.shape))
         print("x_test: {}  , y_test: {} ".format(self.x_test.shape, self.y_test.shape))
 
+        x,y=self.arrange_batches(self.x_train,self.y_train,batch_size)
+
+
+    
+
         model = Sequential()
         model.add(LSTM(neurons[0], stateful=True,
                        batch_input_shape=(batch_size, self.x_train.shape[1], self.x_train.shape[2]),
                        return_sequences=True))
 
         #to make number of hidden layers variable
-        for i in range(1,len(neurons)):
+        for i in range(1,len(neurons)-1):
             model.add(LSTM(neurons[i], stateful=True, return_sequences=True))
+
+        model.add(LSTM(neurons[-1], stateful=True,activation=None ,return_sequences=True))
 
 
         adam = Adam(lr=lr)
@@ -165,7 +205,8 @@ class lstm():
         loss_hist = []
         # fit model
         for i in range(num_epochs):
-            history = model.fit(self.x_train, self.y_train, validation_split=0,epochs=1, batch_size=batch_size, verbose=0, shuffle=False)
+            #give it rerranged data
+            history = model.fit(x, y, validation_split=0,epochs=1, batch_size=batch_size, verbose=0, shuffle=False)
             print("epoch {} , loss {} ".format(i,history.history['loss']))
             loss_hist += history.history['loss']
             model.reset_states()
@@ -191,8 +232,10 @@ class lstm():
         model = Sequential()
         model.add(LSTM(neurons[0], stateful=True, batch_input_shape=(1, 1, 1), return_sequences=True))
 
-        for i in range(1,len(neurons)):
+        for i in range(1,len(neurons)-1):
             model.add(LSTM(neurons[i], stateful=True, return_sequences=True))
+
+        model.add(LSTM(neurons[-1], stateful=True,activation=None ,return_sequences=True))
 
         adam = Adam(lr=self.lr)
 
@@ -222,9 +265,19 @@ class lstm():
         plt.show()
 
         #predict next point from it previous
+        warmup=100
+        prev=np.zeros((1,1,1))
         print("try to predict training data")
-        for i in range(len(x_train)):
-            p = model.predict(x_train[i].reshape(1,1,1))
+        for i in range(3000):
+            p=None
+            if i<warmup:
+                p = model.predict(x_train[i].reshape(1,1,1))
+                prev=p
+            else:
+                #prev=prev.reshape(1,1,1)
+                p=model.predict(prev)
+                prev=p
+
             predictions+=[p.squeeze()]
 
         s=self.std
@@ -246,14 +299,10 @@ class lstm():
         self.file.write('mae on training data: {} '.format(mae))
 
         #plot training data and its prediction results
-        plt.subplot(1,2,1)
-        plt.plot(predicted, 'r')
-        plt.title('predicted')
-
-        plt.subplot(1,2,2)
-
-        plt.plot(true, 'b')
-        plt.title('true')
+      
+        plt.plot(predicted[:1000], 'r')
+        plt.plot(true[:1000], 'b')
+        plt.legend(['predicted', 'true'])
         plt.savefig(self.exp_dir+'training_predicted.png')
         plt.show()
 
@@ -282,7 +331,7 @@ class lstm():
             self.predict_training(model)
 
 
-##########################################################################
+        ##########################################################################
         #predict validation:
         predictions=[]
         prev=np.zeros((1,1,1))
@@ -315,11 +364,20 @@ class lstm():
         self.file.write('rmse on test data: {} '.format(rmse))
         print('rmse on test data: {} '.format(rmse))
 
+
+        #plot results before standardizing:
+        print("predictions before standardizing")
+        plt.plot(predictions)
+        plt.plot(y)
+        plt.legend(['predicted', 'true'])
+        plt.savefig(self.exp_dir+'validationpredicted_withoutreverse.png')
+        plt.show()
+
         #plot results
         plt.plot(predicted)
         plt.plot(true)
         plt.legend(['predicted', 'true'])
-        plt.savefig(self.exp_dir+'validationpredicted.png')
+        plt.savefig(self.exp_dir+'validationpredicted_reversestd.png')
         plt.show()
 
         self.file.close()
@@ -327,4 +385,3 @@ class lstm():
         #return value of  rmse on validation data
         return rmse
 ###############################################
-
